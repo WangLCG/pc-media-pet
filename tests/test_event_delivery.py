@@ -1,5 +1,6 @@
 import asyncio
 import json
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -62,11 +63,15 @@ async def connected_manager(monkeypatch, **setting_overrides):
 async def test_motion_notification_is_removed_after_ack(monkeypatch):
     manager, _, channel = await connected_manager(monkeypatch)
     try:
-        event = MotionDetectedEvent(id="evt_motion_01", confidence=0.82, changed_area=2410)
+        event = MotionDetectedEvent(id="evt_motion_01", ts=49_530, confidence=0.82, changed_area=2410)
         await manager.publish_motion(event)
         motion_message = json.loads(channel.messages[-1])
 
         assert motion_message["type"] == "motion_detected"
+        assert motion_message["ts"] == 49_530
+        assert motion_message["payload"]["occurred_at_hhmmss"] == datetime.fromtimestamp(
+            event.ts, tz=timezone(timedelta(hours=8))
+        ).strftime("%H:%M:%S")
         assert manager.pending_ack_count == 1
 
         channel.handlers["message"](json.dumps({

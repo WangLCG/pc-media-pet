@@ -10,6 +10,7 @@ let mediaPeerConnection;
 let mediaSessionId;
 let reconnectTimer;
 let reconnectAttempt = 0;
+let alertAudioContext;
 const seenNotificationIds = new Set();
 const maxSeenNotificationIds = 256;
 const iceConfiguration = { iceServers: [], iceCandidatePoolSize: 1 };
@@ -22,6 +23,45 @@ function rememberNotification(messageId) {
     seenNotificationIds.delete(seenNotificationIds.values().next().value);
   }
   return true;
+}
+
+function formatOccurrenceTime(message) {
+  if (/^\d{2}:\d{2}:\d{2}$/.test(message.payload?.occurred_at_hhmmss || "")) {
+    return message.payload.occurred_at_hhmmss;
+  }
+  const occurredAt = new Date(message.ts * 1000);
+  return new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Shanghai",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  }).format(occurredAt);
+}
+
+function prepareAlertAudio() {
+  const AudioContext = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContext) return;
+  alertAudioContext ??= new AudioContext();
+  if (alertAudioContext.state === "suspended") {
+    void alertAudioContext.resume();
+  }
+}
+
+function playMotionAlert() {
+  if (!alertAudioContext || alertAudioContext.state !== "running") return;
+  const startAt = alertAudioContext.currentTime;
+  for (const offset of [0, 0.24]) {
+    const oscillator = alertAudioContext.createOscillator();
+    const gain = alertAudioContext.createGain();
+    oscillator.frequency.value = 880;
+    gain.gain.setValueAtTime(0.0001, startAt + offset);
+    gain.gain.exponentialRampToValueAtTime(0.16, startAt + offset + 0.01);
+    gain.gain.exponentialRampToValueAtTime(0.0001, startAt + offset + 0.16);
+    oscillator.connect(gain).connect(alertAudioContext.destination);
+    oscillator.start(startAt + offset);
+    oscillator.stop(startAt + offset + 0.17);
+  }
 }
 
 function createClientId() {
@@ -65,6 +105,9 @@ async function connectNotifications() {
     result.textContent = "Enter an application token.";
     return;
   }
+  // This runs from the Connect button's user gesture, which lets later
+  // DataChannel events play an alert without requiring an audio file.
+  prepareAlertAudio();
 
   if (notifyPeerConnection) notifyPeerConnection.close();
   const peerConnection = new RTCPeerConnection(iceConfiguration);
@@ -100,8 +143,9 @@ async function connectNotifications() {
       }
       if (message.type === "motion_detected") {
         const alert = document.createElement("p");
-        alert.textContent = `Motion detected in ${message.payload.zone}.`;
+        alert.textContent = `Motion detected at ${formatOccurrenceTime(message)} in ${message.payload.zone}.`;
         alerts.prepend(alert);
+        playMotionAlert();
       }
       if (message.type === "camera_error") {
         const alert = document.createElement("p");

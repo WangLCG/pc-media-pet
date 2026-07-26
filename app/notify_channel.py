@@ -6,6 +6,7 @@ import logging
 import time
 import uuid
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 
 from aiortc import RTCPeerConnection, RTCSessionDescription
 from aiortc.rtcdatachannel import RTCDataChannel
@@ -14,6 +15,7 @@ from .config import Settings
 from .models import AckPayload, CameraErrorEvent, MediaStateEvent, MotionDetectedEvent, NotifyAnswer, NotifyEnvelope, NotifyOffer, PongPayload
 
 logger = logging.getLogger(__name__)
+CHINA_STANDARD_TIME = timezone(timedelta(hours=8), name="UTC+08:00")
 
 
 @dataclass
@@ -61,12 +63,16 @@ class NotifyChannelManager:
 
     async def publish_motion(self, event: MotionDetectedEvent) -> None:
         """Send a motion event to all currently healthy notify clients."""
+        payload = event.model_dump(exclude={"id", "ts"})
+        # Keep the machine-readable Unix timestamp in the envelope and add the
+        # operator-facing China Standard Time occurrence time for the UI.
+        payload["occurred_at_hhmmss"] = datetime.fromtimestamp(event.ts, tz=CHINA_STANDARD_TIME).strftime("%H:%M:%S")
         message = NotifyEnvelope(
             version=1,
             type="motion_detected",
             id=event.id,
             ts=event.ts,
-            payload=event.model_dump(exclude={"id", "ts"}),
+            payload=payload,
         )
         async with self._lock:
             clients = tuple(self._clients.values())
