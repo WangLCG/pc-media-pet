@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>PC Media Pet</title>
+    <link rel="stylesheet" href="/static/styles.css">
+  </head>
+  <body>
+    <main class="panel">
+      <h1>PC Media Pet</h1>
+      <p>Enter the application token to connect the notification channel.</p>
+      <label for="token">Application token</label>
+      <input id="token" type="password" autocomplete="off" spellcheck="false">
+      <button id="connect-notify" type="button">Connect notifications</button>
+      <output id="result" aria-live="polite">Not connected.</output>
+    </main>
+    <script src="/static/app.js"></script>
+  </body>
+</html>

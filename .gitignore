@@ -1,0 +1,6 @@
+__pycache__
+.agent
+.codegraph
+.pytest_cache
+*.pyc
+

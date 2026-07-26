@@ -1,0 +1,8 @@
+:root { color-scheme: dark; font-family: system-ui, sans-serif; }
+body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: #121822; }
+.panel { width: min(28rem, calc(100% - 2rem)); padding: 2rem; border-radius: 1rem; background: #202a38; box-sizing: border-box; }
+h1 { margin-top: 0; }
+label, input, button, output { display: block; width: 100%; box-sizing: border-box; }
+input, button { margin-top: .5rem; padding: .7rem; border-radius: .4rem; border: 1px solid #60728b; }
+button { margin-top: 1rem; cursor: pointer; background: #68b4f7; color: #102033; font-weight: 700; }
+output { min-height: 1.5rem; margin-top: 1rem; color: #c7d9ee; }
