@@ -97,7 +97,7 @@ async def test_media_session_rejects_stop_from_another_client(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_media_session_closes_after_idle_timeout(monkeypatch):
+async def test_media_session_closes_when_connection_does_not_establish(monkeypatch):
     peer_connection = FakePeerConnection()
     monkeypatch.setattr("app.media_session.RTCPeerConnection", lambda: peer_connection)
     camera = FakeCamera()
@@ -109,6 +109,22 @@ async def test_media_session_closes_after_idle_timeout(monkeypatch):
     assert manager.session_count == 0
     assert peer_connection.closed is True
     assert camera.modes == ["view", "idle"]
+
+
+@pytest.mark.asyncio
+async def test_connected_media_session_does_not_expire_after_connect_timeout(monkeypatch):
+    peer_connection = FakePeerConnection()
+    monkeypatch.setattr("app.media_session.RTCPeerConnection", lambda: peer_connection)
+    camera = FakeCamera()
+    manager = MediaSessionManager(settings(media_idle_timeout_seconds=1), camera)
+    answer = await manager.create_answer(MediaOffer(client_id="browser-01", sdp="offer-sdp", type="offer"))
+    peer_connection.connectionState = "connected"
+
+    await asyncio.sleep(1.05)
+
+    assert manager.session_count == 1
+    assert peer_connection.closed is False
+    await manager.stop_session(answer.session_id, "browser-01")
 
 
 @pytest.mark.asyncio

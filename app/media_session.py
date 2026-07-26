@@ -88,7 +88,12 @@ class MediaSessionManager:
             local_description = peer_connection.localDescription
             if local_description is None:
                 raise RuntimeError("Media answer was not created")
-            session.timeout_task = asyncio.create_task(self._expire_session(session), name=f"media-timeout-{session_id}")
+            # This is a connection-establishment deadline, not a maximum stream
+            # duration. Active viewers must remain connected until they stop.
+            session.timeout_task = asyncio.create_task(
+                self._expire_unconnected_session(session),
+                name=f"media-connect-timeout-{session_id}",
+            )
             await self._publish(MediaStateEvent(state="started", session_id=session_id))
             return MediaAnswer(session_id=session_id, sdp=local_description.sdp, type=local_description.type)
         except Exception:
@@ -123,10 +128,11 @@ class MediaSessionManager:
     async def close(self) -> None:
         await asyncio.gather(*(self.close_session(session_id) for session_id in list(self._sessions)), return_exceptions=True)
 
-    async def _expire_session(self, session: MediaSession) -> None:
+    async def _expire_unconnected_session(self, session: MediaSession) -> None:
         try:
             await asyncio.sleep(self._settings.media_idle_timeout_seconds)
-            await self.close_session(session.session_id, expected=session.peer_connection)
+            if session.peer_connection.connectionState in {"new", "connecting"}:
+                await self.close_session(session.session_id, expected=session.peer_connection)
         except asyncio.CancelledError:
             raise
 
