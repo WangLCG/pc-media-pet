@@ -11,7 +11,7 @@ from aiortc import RTCPeerConnection, RTCSessionDescription
 from aiortc.rtcdatachannel import RTCDataChannel
 
 from .config import Settings
-from .models import NotifyAnswer, NotifyEnvelope, NotifyOffer, PongPayload
+from .models import AckPayload, MotionDetectedEvent, NotifyAnswer, NotifyEnvelope, NotifyOffer, PongPayload
 
 logger = logging.getLogger(__name__)
 
@@ -29,18 +29,51 @@ class NotifyClient:
     missed_pongs: int = 0
 
 
+@dataclass
+class PendingAck:
+    """One client-specific reliable notification waiting for acknowledgement."""
+
+    client_id: str
+    message: NotifyEnvelope
+    peer_connection: RTCPeerConnection
+    retry_count: int = 0
+    retry_task: asyncio.Task[None] | None = None
+
+
 class NotifyChannelManager:
     """Create, monitor, and clean up one notify connection per client ID."""
 
     def __init__(self, settings: Settings) -> None:
         self._settings = settings
         self._clients: dict[str, NotifyClient] = {}
+        self._pending_acks: dict[tuple[str, str], PendingAck] = {}
         self._lock = asyncio.Lock()
 
     @property
     def client_count(self) -> int:
         """Return the number of active notify PeerConnections."""
         return len(self._clients)
+
+    @property
+    def pending_ack_count(self) -> int:
+        """Return outstanding in-memory acknowledgements for operational status/tests."""
+        return len(self._pending_acks)
+
+    async def publish_motion(self, event: MotionDetectedEvent) -> None:
+        """Send a motion event to all currently healthy notify clients."""
+        message = NotifyEnvelope(
+            version=1,
+            type="motion_detected",
+            id=event.id,
+            ts=event.ts,
+            payload=event.model_dump(exclude={"id", "ts"}),
+        )
+        async with self._lock:
+            clients = tuple(self._clients.values())
+        for client in clients:
+            if not self._is_healthy(client):
+                continue
+            self._send_reliable(client, message)
 
     async def create_answer(self, offer: NotifyOffer) -> NotifyAnswer:
         """Replace an existing client connection and return an SDP answer."""
@@ -121,11 +154,17 @@ class NotifyChannelManager:
             return
         try:
             envelope = NotifyEnvelope.model_validate_json(message)
-            if envelope.type != "pong":
+            if envelope.type == "pong":
+                pong = PongPayload.model_validate(envelope.payload)
+            elif envelope.type == "ack":
+                ack = AckPayload.model_validate(envelope.payload)
+            else:
                 raise ValueError("unexpected message type")
-            pong = PongPayload.model_validate(envelope.payload)
         except (ValueError, json.JSONDecodeError):
             logger.warning("notify_message_rejected", extra={"client_id": client.client_id, "reason": "invalid"})
+            return
+        if envelope.type == "ack":
+            self._acknowledge(client.client_id, ack.message_id)
             return
         if pong.ping_id != client.awaiting_ping_id:
             logger.warning("notify_pong_rejected", extra={"client_id": client.client_id, "reason": "unexpected_ping_id"})
@@ -153,6 +192,47 @@ class NotifyChannelManager:
         ping = self._message("ping", {})
         client.awaiting_ping_id = ping.id
         self._send(client, ping)
+
+    def _send_reliable(self, client: NotifyClient, message: NotifyEnvelope) -> None:
+        """Send an event and retain it only until acknowledged or retry exhaustion."""
+        key = (client.client_id, message.id)
+        if key in self._pending_acks or not self._is_healthy(client):
+            return
+        self._send(client, message)
+        pending = PendingAck(client.client_id, message, client.peer_connection)
+        self._pending_acks[key] = pending
+        pending.retry_task = asyncio.create_task(self._retry_until_acknowledged(pending), name=f"notify-ack-{client.client_id}-{message.id}")
+
+    async def _retry_until_acknowledged(self, pending: PendingAck) -> None:
+        key = (pending.client_id, pending.message.id)
+        try:
+            while True:
+                await asyncio.sleep(self._settings.notify_ack_timeout_seconds)
+                if self._pending_acks.get(key) is not pending:
+                    return
+                if pending.retry_count >= self._settings.notify_max_retries:
+                    self._pending_acks.pop(key, None)
+                    logger.warning("notify_ack_retry_exhausted", extra={"client_id": pending.client_id})
+                    await self.close_client(pending.client_id, expected=pending.peer_connection)
+                    return
+                async with self._lock:
+                    client = self._clients.get(pending.client_id)
+                if client is None or client.peer_connection is not pending.peer_connection or not self._is_healthy(client):
+                    self._pending_acks.pop(key, None)
+                    return
+                pending.retry_count += 1
+                self._send(client, pending.message)
+        except asyncio.CancelledError:
+            raise
+
+    def _acknowledge(self, client_id: str, message_id: str) -> None:
+        pending = self._pending_acks.pop((client_id, message_id), None)
+        if pending is not None and pending.retry_task is not None:
+            pending.retry_task.cancel()
+
+    @staticmethod
+    def _is_healthy(client: NotifyClient) -> bool:
+        return client.channel is not None and client.channel.readyState == "open"
 
     async def _expire_if_channel_does_not_open(self, client: NotifyClient) -> None:
         """Release a negotiated connection if its required notify channel never opens."""
@@ -201,7 +281,17 @@ class NotifyChannelManager:
             if client is None or (expected is not None and client.peer_connection is not expected):
                 return
             self._clients.pop(client_id)
+        self._clear_pending_acks(client_id)
         await self._close_client_resources(client)
+
+    def _clear_pending_acks(self, client_id: str) -> None:
+        """Discard non-persistent events for a disconnected client."""
+        current_task = asyncio.current_task()
+        for key, pending in tuple(self._pending_acks.items()):
+            if key[0] == client_id:
+                self._pending_acks.pop(key, None)
+                if pending.retry_task is not None and pending.retry_task is not current_task:
+                    pending.retry_task.cancel()
 
     @staticmethod
     async def _close_client_resources(client: NotifyClient) -> None:

@@ -1,8 +1,20 @@
 const tokenInput = document.querySelector("#token");
 const result = document.querySelector("#result");
 const connectButton = document.querySelector("#connect-notify");
+const alerts = document.querySelector("#alerts");
 let notifyPeerConnection;
 let reconnectTimer;
+const seenMotionIds = new Set();
+const maxSeenMotionIds = 256;
+
+function rememberMotion(messageId) {
+  if (seenMotionIds.has(messageId)) return false;
+  seenMotionIds.add(messageId);
+  if (seenMotionIds.size > maxSeenMotionIds) {
+    seenMotionIds.delete(seenMotionIds.values().next().value);
+  }
+  return true;
+}
 
 function createClientId() {
   const savedId = sessionStorage.getItem("pc-media-pet-client-id");
@@ -56,6 +68,19 @@ async function connectNotifications() {
           ts: Math.floor(Date.now() / 1000),
           payload: { ping_id: message.id },
         }));
+      }
+      if (message.type === "motion_detected") {
+        channel.send(JSON.stringify({
+          version: 1,
+          type: "ack",
+          id: `ack_${crypto.randomUUID()}`,
+          ts: Math.floor(Date.now() / 1000),
+          payload: { message_id: message.id, status: "received" },
+        }));
+        if (!rememberMotion(message.id)) return;
+        const alert = document.createElement("p");
+        alert.textContent = `Motion detected in ${message.payload.zone}.`;
+        alerts.prepend(alert);
       }
     } catch {
       result.textContent = "Received an invalid notification message.";

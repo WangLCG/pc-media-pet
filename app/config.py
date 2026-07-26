@@ -30,7 +30,7 @@ class Settings(BaseSettings):
     notify_ping_interval_seconds: int = Field(default=20, ge=1)
     notify_missed_pong_limit: int = Field(default=3, ge=1)
     notify_channel_open_timeout_seconds: float = Field(default=15.0, gt=0)
-    notify_ack_timeout_seconds: int = Field(default=5, ge=1)
+    notify_ack_timeout_seconds: float = Field(default=5.0, gt=0)
     notify_max_retries: int = Field(default=3, ge=0)
     media_idle_timeout_seconds: int = Field(default=120, ge=1)
 

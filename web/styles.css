@@ -6,3 +6,5 @@ label, input, button, output { display: block; width: 100%; box-sizing: border-b
 input, button { margin-top: .5rem; padding: .7rem; border-radius: .4rem; border: 1px solid #60728b; }
 button { margin-top: 1rem; cursor: pointer; background: #68b4f7; color: #102033; font-weight: 700; }
 output { min-height: 1.5rem; margin-top: 1rem; color: #c7d9ee; }
+#alerts { margin-top: 1rem; }
+#alerts p { margin: .5rem 0; padding: .6rem; border-radius: .4rem; background: #5d2d33; color: #ffe4e7; }

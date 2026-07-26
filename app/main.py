@@ -10,6 +10,7 @@ from fastapi.staticfiles import StaticFiles
 
 from .auth import require_app_token
 from .config import get_settings
+from .event_bus import EventBus
 from .logging_config import configure_logging
 from .models import NotifyAnswer, NotifyOffer
 from .notify_channel import NotifyChannelManager
@@ -25,6 +26,8 @@ async def lifespan(app: FastAPI):
     # Validate configuration before accepting any request.
     settings = get_settings()
     app.state.notify_manager = NotifyChannelManager(settings)
+    app.state.event_bus = EventBus()
+    app.state.event_bus.subscribe_motion(app.state.notify_manager.publish_motion)
     app.state.started_at = monotonic()
     logger.info("service_started")
     try:
