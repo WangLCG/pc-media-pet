@@ -37,6 +37,7 @@ class Settings(BaseSettings):
     notify_ack_timeout_seconds: float = Field(default=5.0, gt=0)
     notify_max_retries: int = Field(default=3, ge=0)
     media_idle_timeout_seconds: int = Field(default=120, ge=1)
+    webrtc_ipv6_enabled: bool = False
 
     @field_validator("app_token")
     @classmethod
