@@ -11,7 +11,7 @@ from aiortc import RTCPeerConnection, RTCSessionDescription
 from aiortc.rtcdatachannel import RTCDataChannel
 
 from .config import Settings
-from .models import AckPayload, MotionDetectedEvent, NotifyAnswer, NotifyEnvelope, NotifyOffer, PongPayload
+from .models import AckPayload, CameraErrorEvent, MediaStateEvent, MotionDetectedEvent, NotifyAnswer, NotifyEnvelope, NotifyOffer, PongPayload
 
 logger = logging.getLogger(__name__)
 
@@ -74,6 +74,30 @@ class NotifyChannelManager:
             if not self._is_healthy(client):
                 continue
             self._send_reliable(client, message)
+
+    async def publish_camera_error(self, event: CameraErrorEvent) -> None:
+        """Send a non-sensitive camera failure to healthy notify clients."""
+        message = NotifyEnvelope(
+            version=1,
+            type="camera_error",
+            id=event.id,
+            ts=event.ts,
+            payload=event.model_dump(exclude={"id", "ts"}),
+        )
+        async with self._lock:
+            clients = tuple(self._clients.values())
+        for client in clients:
+            if self._is_healthy(client):
+                self._send_reliable(client, message)
+
+    async def publish_media_state(self, event: MediaStateEvent) -> None:
+        """Reliably tell healthy clients when a media session starts or stops."""
+        message = NotifyEnvelope(version=1, type="media_state", id=event.id, ts=event.ts, payload=event.model_dump(exclude={"id", "ts"}))
+        async with self._lock:
+            clients = tuple(self._clients.values())
+        for client in clients:
+            if self._is_healthy(client):
+                self._send_reliable(client, message)
 
     async def create_answer(self, offer: NotifyOffer) -> NotifyAnswer:
         """Replace an existing client connection and return an SDP answer."""

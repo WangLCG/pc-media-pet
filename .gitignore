@@ -2,5 +2,7 @@ __pycache__
 .agent
 .codegraph
 .pytest_cache
+logs/
 *.pyc
+.venv
 

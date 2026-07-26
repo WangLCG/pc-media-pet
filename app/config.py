@@ -1,6 +1,7 @@
 """Application configuration loaded from environment variables."""
 
 from functools import lru_cache
+from typing import Literal
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -16,12 +17,15 @@ class Settings(BaseSettings):
     app_token: str = Field(min_length=16)
 
     camera_index: int = Field(default=0, ge=0)
+    camera_backend: Literal["auto", "dshow", "msmf"] = "auto"
     camera_idle_width: int = Field(default=640, ge=1)
     camera_idle_height: int = Field(default=360, ge=1)
     camera_idle_interval_seconds: float = Field(default=2.0, gt=0)
     camera_view_width: int = Field(default=1280, ge=1)
     camera_view_height: int = Field(default=720, ge=1)
     camera_view_fps: int = Field(default=15, ge=1)
+    camera_shutdown_timeout_seconds: float = Field(default=5.0, gt=0)
+    camera_retry_interval_seconds: float = Field(default=30.0, gt=0)
 
     motion_min_changed_area: int = Field(default=1800, ge=1)
     motion_confirm_frames: int = Field(default=2, ge=1)

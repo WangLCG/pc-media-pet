@@ -4,7 +4,7 @@ import pytest
 from pydantic import ValidationError
 
 from app.config import Settings
-from app.models import NotifyEnvelope, NotifyOffer
+from app.models import CameraErrorEvent, NotifyEnvelope, NotifyOffer
 from app.notify_channel import NotifyChannelManager
 
 
@@ -70,3 +70,16 @@ def test_invalid_offer_and_message_envelope_are_rejected():
         NotifyOffer(client_id="invalid client id", sdp="offer", type="offer")
     with pytest.raises(ValidationError):
         NotifyEnvelope(version=1, type="ping", id="invalid id", ts=0, payload={})
+
+
+def test_camera_error_envelope_type_and_payload_are_validated():
+    event = CameraErrorEvent(code="camera_read_failed", message="USB camera frame capture failed")
+    envelope = NotifyEnvelope(
+        version=1,
+        type="camera_error",
+        id=event.id,
+        ts=event.ts,
+        payload=event.model_dump(exclude={"id", "ts"}),
+    )
+
+    assert envelope.type == "camera_error"

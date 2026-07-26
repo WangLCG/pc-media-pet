@@ -5,7 +5,7 @@ import pytest
 
 from app.config import Settings
 from app.event_bus import EventBus
-from app.models import MotionDetectedEvent, NotifyOffer
+from app.models import CameraErrorEvent, MotionDetectedEvent, NotifyOffer
 from app.notify_channel import NotifyChannelManager
 from tests.test_notify_known_gaps import ImmediatePeerConnection, OpenDataChannel
 
@@ -25,6 +25,21 @@ async def test_event_bus_delivers_typed_motion_event():
     event_bus.subscribe_motion(receive)
     event = MotionDetectedEvent(confidence=0.82, changed_area=2410)
     await event_bus.publish_motion(event)
+
+    assert received == [event]
+
+
+@pytest.mark.asyncio
+async def test_event_bus_delivers_typed_camera_error_event():
+    event_bus = EventBus()
+    received = []
+
+    async def receive(event: CameraErrorEvent) -> None:
+        received.append(event)
+
+    event_bus.subscribe_camera_error(receive)
+    event = CameraErrorEvent(code="camera_unavailable", message="USB camera cannot be opened")
+    await event_bus.publish_camera_error(event)
 
     assert received == [event]
 
@@ -86,5 +101,28 @@ async def test_motion_notification_retries_then_closes_unhealthy_client(monkeypa
         assert manager.pending_ack_count == 0
         assert manager.client_count == 0
         assert peer_connection.closed is True
+    finally:
+        await manager.close()
+
+
+@pytest.mark.asyncio
+async def test_camera_error_notification_is_reliably_acknowledged(monkeypatch):
+    manager, _, channel = await connected_manager(monkeypatch)
+    try:
+        event = CameraErrorEvent(id="evt_camera_01", code="camera_unavailable", message="USB camera cannot be opened")
+        await manager.publish_camera_error(event)
+        message = json.loads(channel.messages[-1])
+
+        assert message["type"] == "camera_error"
+        assert message["payload"] == {"code": "camera_unavailable", "message": "USB camera cannot be opened"}
+        channel.handlers["message"](json.dumps({
+            "version": 1,
+            "type": "ack",
+            "id": "ack_camera_01",
+            "ts": event.ts + 1,
+            "payload": {"message_id": event.id, "status": "received"},
+        }))
+        await asyncio.sleep(0)
+        assert manager.pending_ack_count == 0
     finally:
         await manager.close()

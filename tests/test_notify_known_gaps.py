@@ -133,7 +133,6 @@ async def test_client_is_closed_after_missed_pongs(monkeypatch):
         await manager.close()
 
 
-@pytest.mark.xfail(strict=True, reason="Malformed SDP reaches aiortc and is surfaced as an internal server error.")
 def test_invalid_sdp_returns_a_client_error(monkeypatch):
     token = "test-token-that-is-long-enough"
     monkeypatch.setenv("APP_TOKEN", token)
