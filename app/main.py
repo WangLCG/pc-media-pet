@@ -9,6 +9,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from .auth import require_app_token
+from .audio import SoundDetector
 from .camera import CameraManager
 from .config import get_settings
 from .event_bus import EventBus
@@ -33,17 +34,21 @@ async def lifespan(app: FastAPI):
     app.state.notify_manager = NotifyChannelManager(settings)
     app.state.event_bus = EventBus()
     app.state.event_bus.subscribe_motion(app.state.notify_manager.publish_motion)
+    app.state.event_bus.subscribe_sound(app.state.notify_manager.publish_sound)
     app.state.event_bus.subscribe_camera_error(app.state.notify_manager.publish_camera_error)
     app.state.camera_manager = CameraManager(settings, app.state.event_bus.publish_camera_error)
     app.state.motion_detector = MotionDetector(app.state.camera_manager, app.state.event_bus, settings)
+    app.state.sound_detector = SoundDetector(settings, app.state.event_bus)
     app.state.media_manager = MediaSessionManager(settings, app.state.camera_manager, app.state.notify_manager.publish_media_state)
     await app.state.camera_manager.start()
     await app.state.motion_detector.start()
+    await app.state.sound_detector.start()
     app.state.started_at = monotonic()
     logger.info("service_started")
     try:
         yield
     finally:
+        await app.state.sound_detector.stop()
         await app.state.motion_detector.stop()
         await app.state.media_manager.close()
         await app.state.camera_manager.stop()
@@ -76,6 +81,7 @@ async def status() -> dict[str, str | int]:
         "media_sessions": app.state.media_manager.session_count,
         "camera_mode": app.state.camera_manager.mode,
         "motion_state": app.state.motion_detector.state,
+        "sound_state": app.state.sound_detector.state,
         "uptime_seconds": int(monotonic() - app.state.started_at),
     }
 

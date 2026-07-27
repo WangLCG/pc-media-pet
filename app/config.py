@@ -27,6 +27,18 @@ class Settings(BaseSettings):
     camera_shutdown_timeout_seconds: float = Field(default=5.0, gt=0)
     camera_retry_interval_seconds: float = Field(default=30.0, gt=0)
 
+    # Audio capture is deliberately separate from the WebRTC viewing session:
+    # monitoring stays active even when no browser is streaming video.
+    audio_enabled: bool = False
+    audio_device: str = Field(default="", max_length=512)
+    audio_vad_mode: int = Field(default=3, ge=0, le=3)
+    audio_loudness_threshold_dbfs: float = Field(default=-35.0, ge=-100, le=0)
+    audio_loudness_override_dbfs: float = Field(default=-22.0, ge=-100, le=0)
+    audio_confirm_frames: int = Field(default=5, ge=1)
+    audio_cooldown_seconds: int = Field(default=60, ge=0)
+    audio_retry_interval_seconds: float = Field(default=30.0, gt=0)
+    audio_shutdown_timeout_seconds: float = Field(default=5.0, gt=0)
+
     motion_min_changed_area: int = Field(default=1800, ge=1)
     motion_confirm_frames: int = Field(default=2, ge=1)
     motion_cooldown_seconds: int = Field(default=300, ge=0)

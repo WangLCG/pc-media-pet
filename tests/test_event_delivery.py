@@ -6,7 +6,7 @@ import pytest
 
 from app.config import Settings
 from app.event_bus import EventBus
-from app.models import CameraErrorEvent, MotionDetectedEvent, NotifyOffer
+from app.models import CameraErrorEvent, MotionDetectedEvent, NotifyOffer, SoundDetectedEvent
 from app.notify_channel import NotifyChannelManager
 from tests.test_notify_known_gaps import ImmediatePeerConnection, OpenDataChannel
 
@@ -45,6 +45,21 @@ async def test_event_bus_delivers_typed_camera_error_event():
     assert received == [event]
 
 
+@pytest.mark.asyncio
+async def test_event_bus_delivers_typed_sound_event():
+    event_bus = EventBus()
+    received = []
+
+    async def receive(event: SoundDetectedEvent) -> None:
+        received.append(event)
+
+    event_bus.subscribe_sound(receive)
+    event = SoundDetectedEvent(rms_dbfs=-18.5, vad_speech=False, confidence=0.47)
+    await event_bus.publish_sound(event)
+
+    assert received == [event]
+
+
 async def connected_manager(monkeypatch, **setting_overrides):
     peer_connection = ImmediatePeerConnection()
     monkeypatch.setattr("app.notify_channel.RTCPeerConnection", lambda: peer_connection)
@@ -78,6 +93,30 @@ async def test_motion_notification_is_removed_after_ack(monkeypatch):
             "version": 1,
             "type": "ack",
             "id": "ack_motion_01",
+            "ts": event.ts + 1,
+            "payload": {"message_id": event.id, "status": "received"},
+        }))
+        await asyncio.sleep(0)
+        assert manager.pending_ack_count == 0
+    finally:
+        await manager.close()
+
+
+@pytest.mark.asyncio
+async def test_sound_notification_is_reliably_acknowledged(monkeypatch):
+    manager, _, channel = await connected_manager(monkeypatch)
+    try:
+        event = SoundDetectedEvent(id="evt_sound_01", ts=49_530, rms_dbfs=-18.5, vad_speech=False, confidence=0.47)
+        await manager.publish_sound(event)
+        message = json.loads(channel.messages[-1])
+
+        assert message["type"] == "sound_detected"
+        assert message["payload"]["rms_dbfs"] == -18.5
+        assert message["payload"]["vad_speech"] is False
+        channel.handlers["message"](json.dumps({
+            "version": 1,
+            "type": "ack",
+            "id": "ack_sound_01",
             "ts": event.ts + 1,
             "payload": {"message_id": event.id, "status": "received"},
         }))

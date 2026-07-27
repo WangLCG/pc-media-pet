@@ -49,7 +49,7 @@ class NotifyEnvelope(BaseModel):
     """Versioned JSON message sent through the notify DataChannel."""
 
     version: Literal[1]
-    type: Literal["hello", "ping", "pong", "motion_detected", "camera_error", "media_state", "ack"]
+    type: Literal["hello", "ping", "pong", "motion_detected", "sound_detected", "camera_error", "media_state", "ack"]
     id: str = Field(min_length=1, max_length=128, pattern=MESSAGE_ID_PATTERN)
     ts: int = Field(ge=0)
     payload: dict[str, Any]
@@ -76,6 +76,16 @@ class MotionDetectedEvent(BaseModel):
     zone: str = Field(default="default", min_length=1, max_length=64)
     confidence: float = Field(ge=0, le=1)
     changed_area: int = Field(ge=0)
+
+
+class SoundDetectedEvent(BaseModel):
+    """In-memory loud-sound event; audio samples are never retained or sent."""
+
+    id: str = Field(default_factory=lambda: f"evt_{uuid.uuid4().hex}", min_length=1, max_length=128, pattern=MESSAGE_ID_PATTERN)
+    ts: int = Field(default_factory=lambda: int(time.time()), ge=0)
+    rms_dbfs: float = Field(ge=-100, le=0)
+    vad_speech: bool
+    confidence: float = Field(ge=0, le=1)
 
 
 class CameraErrorEvent(BaseModel):

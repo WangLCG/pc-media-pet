@@ -12,7 +12,7 @@ from aiortc import RTCPeerConnection, RTCSessionDescription
 from aiortc.rtcdatachannel import RTCDataChannel
 
 from .config import Settings
-from .models import AckPayload, CameraErrorEvent, MediaStateEvent, MotionDetectedEvent, NotifyAnswer, NotifyEnvelope, NotifyOffer, PongPayload
+from .models import AckPayload, CameraErrorEvent, MediaStateEvent, MotionDetectedEvent, NotifyAnswer, NotifyEnvelope, NotifyOffer, PongPayload, SoundDetectedEvent
 
 logger = logging.getLogger(__name__)
 CHINA_STANDARD_TIME = timezone(timedelta(hours=8), name="UTC+08:00")
@@ -80,6 +80,17 @@ class NotifyChannelManager:
             if not self._is_healthy(client):
                 continue
             self._send_reliable(client, message)
+
+    async def publish_sound(self, event: SoundDetectedEvent) -> None:
+        """Send a loud-sound event; the payload contains measurements, never audio."""
+        payload = event.model_dump(exclude={"id", "ts"})
+        payload["occurred_at_hhmmss"] = datetime.fromtimestamp(event.ts, tz=CHINA_STANDARD_TIME).strftime("%H:%M:%S")
+        message = NotifyEnvelope(version=1, type="sound_detected", id=event.id, ts=event.ts, payload=payload)
+        async with self._lock:
+            clients = tuple(self._clients.values())
+        for client in clients:
+            if self._is_healthy(client):
+                self._send_reliable(client, message)
 
     async def publish_camera_error(self, event: CameraErrorEvent) -> None:
         """Send a non-sensitive camera failure to healthy notify clients."""

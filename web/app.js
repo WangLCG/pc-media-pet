@@ -131,7 +131,7 @@ async function connectNotifications() {
           payload: { ping_id: message.id },
         }));
       }
-      if (["motion_detected", "camera_error", "media_state"].includes(message.type)) {
+      if (["motion_detected", "sound_detected", "camera_error", "media_state"].includes(message.type)) {
         channel.send(JSON.stringify({
           version: 1,
           type: "ack",
@@ -144,6 +144,12 @@ async function connectNotifications() {
       if (message.type === "motion_detected") {
         const alert = document.createElement("p");
         alert.textContent = `Motion detected at ${formatOccurrenceTime(message)} in ${message.payload.zone}.`;
+        alerts.prepend(alert);
+        playMotionAlert();
+      }
+      if (message.type === "sound_detected") {
+        const alert = document.createElement("p");
+        alert.textContent = `Loud sound detected at ${formatOccurrenceTime(message)} (${message.payload.rms_dbfs.toFixed(1)} dBFS).`;
         alerts.prepend(alert);
         playMotionAlert();
       }
