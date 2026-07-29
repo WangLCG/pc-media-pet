@@ -30,11 +30,33 @@ def test_web_page_has_mobile_viewport_and_hidden_video_until_streaming():
     assert "remoteVideo.hidden = true;" in source
 
 
+def test_web_page_uses_chinese_labels_and_loading_state_for_both_connections():
+    markup = (ROOT / "web" / "index.html").read_text(encoding="utf-8")
+    source = (ROOT / "web" / "app.js").read_text(encoding="utf-8")
+
+    assert '<html lang="zh-CN">' in markup
+    assert "电脑媒体管家" in markup
+    assert "通知连接中" in source
+    assert "摄像头连接中" in source
+    assert "function setButtonState" in source
+    assert 'setStatus(notifyStatus, "连接中", "connecting")' in source
+    assert 'setStatus(streamStatus, "连接中", "connecting")' in source
+    assert "mediaPeerConnection === peerConnection && remoteVideo.hidden" in source
+
+
 def test_mobile_styles_keep_controls_and_video_within_the_viewport():
     styles = (ROOT / "web" / "styles.css").read_text(encoding="utf-8")
 
     assert "env(safe-area-inset-top)" in styles
     assert ".camera-controls { display: grid; gap: .75rem; }" in styles
-    assert "@media (min-width: 30rem)" in styles
+    assert "@media (min-width: 34rem)" in styles
     assert "aspect-ratio: 16 / 9" in styles
     assert "object-fit: contain" in styles
+
+
+def test_web_styles_include_loading_animation_and_reduced_motion_support():
+    styles = (ROOT / "web" / "styles.css").read_text(encoding="utf-8")
+
+    assert "button.is-loading .button-spinner" in styles
+    assert "@keyframes spin" in styles
+    assert "@media (prefers-reduced-motion: reduce)" in styles

@@ -1,27 +1,65 @@
 <!doctype html>
-<html lang="en">
+<html lang="zh-CN">
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>PC Media Pet</title>
+    <title>电脑媒体管家</title>
     <link rel="stylesheet" href="/static/styles.css">
   </head>
   <body>
-    <main class="panel">
-      <h1>PC Media Pet</h1>
-      <p>Enter the application token to connect the notification channel.</p>
-      <label for="token">Application token</label>
-      <input id="token" type="password" autocomplete="off" spellcheck="false">
-      <button id="connect-notify" type="button">Connect notifications</button>
-      <section class="camera-section" aria-label="Live video">
-        <div class="camera-controls">
-          <button id="start-stream" type="button">View camera</button>
-          <button id="stop-stream" type="button" disabled>Stop camera</button>
-        </div>
-        <video id="remote-video" autoplay playsinline muted hidden aria-label="Live camera feed"></video>
+    <main class="app-shell">
+      <section class="panel" aria-labelledby="page-title">
+        <header class="hero">
+          <p class="eyebrow">设备监护</p>
+          <h1 id="page-title">电脑媒体管家</h1>
+          <p class="hero-copy">连接通知通道后，可随时查看摄像头画面与环境告警。</p>
+        </header>
+
+        <section class="control-card" aria-labelledby="notification-title">
+          <div class="section-heading">
+            <div>
+              <p class="section-kicker">连接管理</p>
+              <h2 id="notification-title">通知通道</h2>
+            </div>
+            <span class="status-pill" id="notify-status" data-state="idle">未连接</span>
+          </div>
+          <label for="token">应用令牌</label>
+          <input id="token" type="password" autocomplete="off" spellcheck="false" placeholder="请输入应用令牌">
+          <button id="connect-notify" type="button">
+            <span class="button-label">连接通知</span>
+            <span class="button-spinner" aria-hidden="true"></span>
+          </button>
+        </section>
+
+        <section class="control-card camera-section" aria-labelledby="camera-title">
+          <div class="section-heading">
+            <div>
+              <p class="section-kicker">实时画面</p>
+              <h2 id="camera-title">摄像头</h2>
+            </div>
+            <span class="status-pill" id="stream-status" data-state="idle">待启动</span>
+          </div>
+          <div class="camera-controls">
+            <button id="start-stream" type="button">
+              <span class="button-label">查看摄像头</span>
+              <span class="button-spinner" aria-hidden="true"></span>
+            </button>
+            <button id="stop-stream" class="button-secondary" type="button" disabled>停止画面</button>
+          </div>
+          <video id="remote-video" autoplay playsinline muted hidden aria-label="实时摄像头画面"></video>
+        </section>
+
+        <output id="result" class="connection-result" aria-live="polite" aria-atomic="true">等待连接通知通道。</output>
+        <section class="alerts-card" aria-labelledby="alerts-title" aria-live="assertive">
+          <div class="section-heading compact-heading">
+            <div>
+              <p class="section-kicker">安全提醒</p>
+              <h2 id="alerts-title">实时告警</h2>
+            </div>
+          </div>
+          <div id="alerts"><p class="empty-alerts">暂未收到告警。</p></div>
+        </section>
       </section>
-      <output id="result" aria-live="polite">Not connected.</output>
-      <section id="alerts" aria-live="assertive" aria-label="Motion alerts"></section>
     </main>
     <script src="/static/app.js"></script>
   </body>
