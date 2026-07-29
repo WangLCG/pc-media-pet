@@ -13,10 +13,12 @@
       <label for="token">Application token</label>
       <input id="token" type="password" autocomplete="off" spellcheck="false">
       <button id="connect-notify" type="button">Connect notifications</button>
-      <section aria-label="Live video">
-        <button id="start-stream" type="button">View camera</button>
-        <button id="stop-stream" type="button" disabled>Stop camera</button>
-        <video id="remote-video" autoplay playsinline muted></video>
+      <section class="camera-section" aria-label="Live video">
+        <div class="camera-controls">
+          <button id="start-stream" type="button">View camera</button>
+          <button id="stop-stream" type="button" disabled>Stop camera</button>
+        </div>
+        <video id="remote-video" autoplay playsinline muted hidden aria-label="Live camera feed"></video>
       </section>
       <output id="result" aria-live="polite">Not connected.</output>
       <section id="alerts" aria-live="assertive" aria-label="Motion alerts"></section>

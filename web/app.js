@@ -203,7 +203,10 @@ async function startStream() {
   const peerConnection = new RTCPeerConnection(iceConfiguration);
   mediaPeerConnection = peerConnection;
   peerConnection.addTransceiver("video", { direction: "recvonly" });
-  peerConnection.addEventListener("track", ({ streams }) => { remoteVideo.srcObject = streams[0]; });
+  peerConnection.addEventListener("track", ({ streams }) => {
+    remoteVideo.srcObject = streams[0];
+    remoteVideo.hidden = false;
+  });
   peerConnection.addEventListener("connectionstatechange", () => {
     // "disconnected" is a transient ICE state. Closing the connection here
     // can stop a healthy stream after its first frame while ICE recovers.
@@ -237,6 +240,7 @@ async function stopStream(notifyServer = true) {
   mediaPeerConnection?.close();
   mediaPeerConnection = undefined;
   remoteVideo.srcObject = null;
+  remoteVideo.hidden = true;
   startStreamButton.disabled = false;
   stopStreamButton.disabled = true;
   if (notifyServer && sessionId && tokenInput.value.trim()) {
