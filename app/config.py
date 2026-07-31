@@ -42,9 +42,13 @@ class Settings(BaseSettings):
     audio_shutdown_timeout_seconds: float = Field(default=5.0, gt=0)
 
     motion_min_changed_area: int = Field(default=1800, ge=1)
-    # Require several successive frame changes so a brief exposure shift or
-    # a single dropped frame does not generate a notification.
+    # Require several matching motion hits within a short time window so a
+    # brief exposure shift or a single dropped frame does not notify.
     motion_confirm_frames: int = Field(default=3, ge=1)
+    motion_confirm_window_seconds: float = Field(default=5.0, gt=0)
+    motion_min_region_iou: float = Field(default=0.2, ge=0, le=1)
+    motion_global_change_ratio: float = Field(default=0.75, gt=0, le=1)
+    motion_global_brightness_delta: float = Field(default=12.0, gt=0, le=255)
     motion_cooldown_seconds: int = Field(default=300, ge=0)
 
     notify_ping_interval_seconds: int = Field(default=20, ge=1)

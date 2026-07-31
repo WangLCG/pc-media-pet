@@ -13,6 +13,10 @@ def settings(**overrides) -> Settings:
         "app_token": "test-token-that-is-long-enough",
         "motion_min_changed_area": 100,
         "motion_confirm_frames": 2,
+        "motion_confirm_window_seconds": 5,
+        "motion_min_region_iou": 0.2,
+        "motion_global_change_ratio": 0.75,
+        "motion_global_brightness_delta": 12,
         "motion_cooldown_seconds": 60,
     }
     values.update(overrides)
@@ -157,6 +161,61 @@ async def test_detector_restarts_confirmation_count_after_motion_cooldown():
     assert await detector.process_frame(moving, now=12) is None
     assert await detector.process_frame(still, now=13) is not None
     assert len(received) == 2
+
+
+@pytest.mark.asyncio
+async def test_detector_requires_hits_to_fit_inside_the_confirmation_window():
+    detector = MotionDetector(
+        UnusedCamera(), EventBus(), settings(motion_confirm_frames=2, motion_confirm_window_seconds=1)
+    )
+    still = np.zeros((120, 160, 3), dtype=np.uint8)
+    moving = still.copy()
+    moving[30:100, 40:120] = 255
+
+    await detector.process_frame(still, now=0)
+    assert await detector.process_frame(moving, now=0) is None
+    # The first hit has expired, so this is again only the first hit.
+    assert await detector.process_frame(still, now=2) is None
+    assert await detector.process_frame(moving, now=2.1) is not None
+
+
+@pytest.mark.asyncio
+async def test_detector_requires_motion_hits_to_remain_in_the_same_region():
+    detector = MotionDetector(
+        UnusedCamera(), EventBus(), settings(motion_confirm_frames=2, motion_min_region_iou=0.5)
+    )
+    still = np.zeros((120, 160, 3), dtype=np.uint8)
+    left = still.copy()
+    left[30:70, 10:40] = 255
+    right = still.copy()
+    right[30:70, 110:140] = 255
+
+    await detector.process_frame(still, now=0)
+    assert await detector.process_frame(left, now=1) is None
+    assert await detector.process_frame(right, now=2) is None
+
+
+@pytest.mark.asyncio
+async def test_detector_ignores_global_brightness_flashes_and_rebuilds_baseline():
+    event_bus = EventBus()
+    received = []
+
+    async def receive(event):
+        received.append(event)
+
+    event_bus.subscribe_motion(receive)
+    detector = MotionDetector(UnusedCamera(), event_bus, settings(motion_confirm_frames=2))
+    dark = np.zeros((120, 160, 3), dtype=np.uint8)
+    bright = np.full((120, 160, 3), 255, dtype=np.uint8)
+    local = dark.copy()
+    local[30:100, 40:120] = 255
+
+    await detector.process_frame(dark, now=0)
+    assert await detector.process_frame(bright, now=1) is None
+    assert await detector.process_frame(dark, now=2) is None
+    assert await detector.process_frame(local, now=3) is None
+    assert await detector.process_frame(dark, now=4) is not None
+    assert len(received) == 1
 
 
 @pytest.mark.asyncio
