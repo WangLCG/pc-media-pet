@@ -34,13 +34,17 @@ class Settings(BaseSettings):
     audio_vad_mode: int = Field(default=3, ge=0, le=3)
     audio_loudness_threshold_dbfs: float = Field(default=-35.0, ge=-100, le=0)
     audio_loudness_override_dbfs: float = Field(default=-22.0, ge=-100, le=0)
-    audio_confirm_frames: int = Field(default=5, ge=1)
+    # Audio frames are 20 ms each. Ten positive frames require roughly 200 ms
+    # of sustained sound before a notification can be emitted.
+    audio_confirm_frames: int = Field(default=10, ge=1)
     audio_cooldown_seconds: int = Field(default=60, ge=0)
     audio_retry_interval_seconds: float = Field(default=30.0, gt=0)
     audio_shutdown_timeout_seconds: float = Field(default=5.0, gt=0)
 
     motion_min_changed_area: int = Field(default=1800, ge=1)
-    motion_confirm_frames: int = Field(default=2, ge=1)
+    # Require several successive frame changes so a brief exposure shift or
+    # a single dropped frame does not generate a notification.
+    motion_confirm_frames: int = Field(default=3, ge=1)
     motion_cooldown_seconds: int = Field(default=300, ge=0)
 
     notify_ping_interval_seconds: int = Field(default=20, ge=1)

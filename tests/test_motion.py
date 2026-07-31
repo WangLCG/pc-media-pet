@@ -83,6 +83,83 @@ async def test_detector_ignores_small_changes():
 
 
 @pytest.mark.asyncio
+async def test_detector_filters_a_single_motion_disturbance_until_the_confirm_count_is_met():
+    event_bus = EventBus()
+    received = []
+
+    async def receive(event):
+        received.append(event)
+
+    event_bus.subscribe_motion(receive)
+    detector = MotionDetector(UnusedCamera(), event_bus, settings(motion_confirm_frames=3))
+    still = np.zeros((120, 160, 3), dtype=np.uint8)
+    disturbance = still.copy()
+    disturbance[30:100, 40:120] = 255
+
+    await detector.process_frame(still, now=0)
+    assert await detector.process_frame(disturbance, now=1) is None
+    assert await detector.process_frame(still, now=2) is None
+    # A quiet frame breaks the sequence; the two edges of one brief movement
+    # must not be enough to trigger a three-hit notification threshold.
+    assert await detector.process_frame(still, now=3) is None
+    assert received == []
+
+
+@pytest.mark.asyncio
+async def test_detector_notifies_after_the_configured_number_of_motion_hits():
+    event_bus = EventBus()
+    received = []
+
+    async def receive(event):
+        received.append(event)
+
+    event_bus.subscribe_motion(receive)
+    detector = MotionDetector(UnusedCamera(), event_bus, settings(motion_confirm_frames=3))
+    frames = [np.zeros((120, 160, 3), dtype=np.uint8)]
+    for offset in (10, 30, 50):
+        frame = frames[0].copy()
+        frame[30:100, offset:offset + 50] = 255
+        frames.append(frame)
+
+    assert await detector.process_frame(frames[0], now=0) is None
+    assert await detector.process_frame(frames[1], now=1) is None
+    assert await detector.process_frame(frames[2], now=2) is None
+    event = await detector.process_frame(frames[3], now=3)
+
+    assert event is not None
+    assert received == [event]
+
+
+@pytest.mark.asyncio
+async def test_detector_restarts_confirmation_count_after_motion_cooldown():
+    event_bus = EventBus()
+    received = []
+
+    async def receive(event):
+        received.append(event)
+
+    event_bus.subscribe_motion(receive)
+    detector = MotionDetector(
+        UnusedCamera(), event_bus, settings(motion_confirm_frames=2, motion_cooldown_seconds=10)
+    )
+    still = np.zeros((120, 160, 3), dtype=np.uint8)
+    moving = still.copy()
+    moving[30:100, 40:120] = 255
+
+    await detector.process_frame(still, now=0)
+    await detector.process_frame(moving, now=1)
+    assert await detector.process_frame(still, now=2) is not None
+
+    # Sustained changes during cooldown cannot count toward the next event.
+    assert await detector.process_frame(moving, now=3) is None
+    assert await detector.process_frame(still, now=4) is None
+
+    assert await detector.process_frame(moving, now=12) is None
+    assert await detector.process_frame(still, now=13) is not None
+    assert len(received) == 2
+
+
+@pytest.mark.asyncio
 async def test_detector_resets_its_baseline_when_camera_resolution_changes():
     detector = MotionDetector(UnusedCamera(), EventBus(), settings())
 

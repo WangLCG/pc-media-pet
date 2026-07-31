@@ -70,8 +70,14 @@ class MotionDetector:
         if changed_area < self._settings.motion_min_changed_area:
             self._consecutive_detections = 0
             return None
+        # Do not allow activity during cooldown to pre-fill the next
+        # confirmation window. A new notification must always earn its own
+        # full sequence of confirmed detections.
+        if self._in_cooldown(now):
+            self._consecutive_detections = 0
+            return None
         self._consecutive_detections += 1
-        if self._consecutive_detections < self._settings.motion_confirm_frames or self._in_cooldown(now):
+        if self._consecutive_detections < self._settings.motion_confirm_frames:
             return None
         event = MotionDetectedEvent(
             confidence=min(1.0, changed_area / current.size),

@@ -89,8 +89,13 @@ class SoundDetector:
         if not active:
             self._consecutive_detections = 0
             return None
+        # Ignore and clear hits while cooling down so sound that spans the
+        # cooldown boundary cannot immediately create another notification.
+        if self._in_cooldown(now):
+            self._consecutive_detections = 0
+            return None
         self._consecutive_detections += 1
-        if self._consecutive_detections < self._settings.audio_confirm_frames or self._in_cooldown(now):
+        if self._consecutive_detections < self._settings.audio_confirm_frames:
             return None
         self._consecutive_detections = 0
         occurred_at = time.monotonic() if now is None else now
