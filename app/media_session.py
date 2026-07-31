@@ -13,6 +13,7 @@ from av import VideoFrame
 from .camera import CameraManager
 from .config import Settings
 from .models import MediaAnswer, MediaOffer, MediaStateEvent
+from .webrtc import local_ice_configuration
 
 logger = logging.getLogger(__name__)
 
@@ -65,7 +66,7 @@ class MediaSessionManager:
     async def create_answer(self, offer: MediaOffer) -> MediaAnswer:
         if not offer.video or offer.audio:
             raise ValueError("Only video media sessions are supported")
-        peer_connection = RTCPeerConnection()
+        peer_connection = RTCPeerConnection(local_ice_configuration())
         session_id = f"media_{uuid.uuid4().hex}"
         session = MediaSession(session_id, offer.client_id, peer_connection)
 

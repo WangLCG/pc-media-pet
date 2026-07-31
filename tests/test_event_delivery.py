@@ -62,7 +62,7 @@ async def test_event_bus_delivers_typed_sound_event():
 
 async def connected_manager(monkeypatch, **setting_overrides):
     peer_connection = ImmediatePeerConnection()
-    monkeypatch.setattr("app.notify_channel.RTCPeerConnection", lambda: peer_connection)
+    monkeypatch.setattr("app.notify_channel.RTCPeerConnection", lambda configuration: peer_connection)
     manager = NotifyChannelManager(settings(**setting_overrides))
     offer = NotifyOffer(client_id="browser-01", sdp="offer-sdp", type="offer")
     await manager.create_answer(offer)

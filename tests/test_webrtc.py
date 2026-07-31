@@ -25,3 +25,7 @@ def test_ipv6_enabled_restores_default_ice_candidate_provider(monkeypatch):
     webrtc.configure_ice_candidates(ipv6_enabled=True)
 
     assert webrtc.ice.get_host_addresses(use_ipv4=False, use_ipv6=True) == ["2001:db8::1"]
+
+
+def test_local_ice_configuration_has_no_stun_or_turn_servers():
+    assert webrtc.local_ice_configuration().iceServers == []

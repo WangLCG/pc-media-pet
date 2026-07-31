@@ -26,7 +26,8 @@ class FakeCamera:
 
 
 class FakePeerConnection:
-    def __init__(self):
+    def __init__(self, configuration=None):
+        self.configuration = configuration
         self.connectionState = "new"
         self.iceGatheringState = "complete"
         self.localDescription = None
@@ -60,7 +61,7 @@ class FakePeerConnection:
 @pytest.mark.asyncio
 async def test_media_session_uses_shared_camera_and_returns_to_idle(monkeypatch):
     peer_connection = FakePeerConnection()
-    monkeypatch.setattr("app.media_session.RTCPeerConnection", lambda: peer_connection)
+    monkeypatch.setattr("app.media_session.RTCPeerConnection", lambda configuration: peer_connection)
     camera = FakeCamera()
     states = []
 
@@ -99,7 +100,7 @@ async def test_media_session_rejects_stop_from_another_client(monkeypatch):
 @pytest.mark.asyncio
 async def test_media_session_closes_when_connection_does_not_establish(monkeypatch):
     peer_connection = FakePeerConnection()
-    monkeypatch.setattr("app.media_session.RTCPeerConnection", lambda: peer_connection)
+    monkeypatch.setattr("app.media_session.RTCPeerConnection", lambda configuration: peer_connection)
     camera = FakeCamera()
     manager = MediaSessionManager(settings(media_idle_timeout_seconds=1), camera)
     answer = await manager.create_answer(MediaOffer(client_id="browser-01", sdp="offer-sdp", type="offer"))
@@ -114,7 +115,7 @@ async def test_media_session_closes_when_connection_does_not_establish(monkeypat
 @pytest.mark.asyncio
 async def test_connected_media_session_does_not_expire_after_connect_timeout(monkeypatch):
     peer_connection = FakePeerConnection()
-    monkeypatch.setattr("app.media_session.RTCPeerConnection", lambda: peer_connection)
+    monkeypatch.setattr("app.media_session.RTCPeerConnection", lambda configuration: peer_connection)
     camera = FakeCamera()
     manager = MediaSessionManager(settings(media_idle_timeout_seconds=1), camera)
     answer = await manager.create_answer(MediaOffer(client_id="browser-01", sdp="offer-sdp", type="offer"))

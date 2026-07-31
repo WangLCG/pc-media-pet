@@ -16,7 +16,8 @@ from app.notify_channel import NotifyChannelManager
 
 
 class ImmediatePeerConnection:
-    def __init__(self):
+    def __init__(self, configuration=None):
+        self.configuration = configuration
         self.connectionState = "new"
         self.iceGatheringState = "complete"
         self.localDescription = None
@@ -44,8 +45,8 @@ class ImmediatePeerConnection:
 
 
 class BlockingPeerConnection(ImmediatePeerConnection):
-    def __init__(self):
-        super().__init__()
+    def __init__(self, configuration=None):
+        super().__init__(configuration)
         self.remote_description_started = asyncio.Event()
         self.allow_remote_description = asyncio.Event()
 
@@ -80,7 +81,7 @@ def settings(**overrides) -> Settings:
 async def test_concurrent_offer_is_cancelled_when_same_client_reconnects(monkeypatch):
     first_connection = BlockingPeerConnection()
     connections = [first_connection, ImmediatePeerConnection()]
-    monkeypatch.setattr("app.notify_channel.RTCPeerConnection", lambda: connections.pop(0))
+    monkeypatch.setattr("app.notify_channel.RTCPeerConnection", lambda configuration: connections.pop(0))
     manager = NotifyChannelManager(settings())
     offer = NotifyOffer(client_id="browser-01", sdp="offer-sdp", type="offer")
 
@@ -97,7 +98,7 @@ async def test_concurrent_offer_is_cancelled_when_same_client_reconnects(monkeyp
 @pytest.mark.asyncio
 async def test_offer_without_datachannel_expires(monkeypatch):
     peer_connection = ImmediatePeerConnection()
-    monkeypatch.setattr("app.notify_channel.RTCPeerConnection", lambda: peer_connection)
+    monkeypatch.setattr("app.notify_channel.RTCPeerConnection", lambda configuration: peer_connection)
     manager = NotifyChannelManager(settings(notify_channel_open_timeout_seconds=0.01))
     offer = NotifyOffer(client_id="silent-browser", sdp="offer-sdp", type="offer")
 
@@ -114,7 +115,7 @@ async def test_offer_without_datachannel_expires(monkeypatch):
 @pytest.mark.asyncio
 async def test_client_is_closed_after_missed_pongs(monkeypatch):
     peer_connection = ImmediatePeerConnection()
-    monkeypatch.setattr("app.notify_channel.RTCPeerConnection", lambda: peer_connection)
+    monkeypatch.setattr("app.notify_channel.RTCPeerConnection", lambda configuration: peer_connection)
     manager = NotifyChannelManager(settings(notify_ping_interval_seconds=1, notify_missed_pong_limit=1))
     offer = NotifyOffer(client_id="unresponsive-browser", sdp="offer-sdp", type="offer")
 

@@ -11,7 +11,8 @@ from app.notify_channel import NotifyChannelManager
 class FakePeerConnection:
     """Small aiortc replacement used to verify manager ownership behavior."""
 
-    def __init__(self):
+    def __init__(self, configuration=None):
+        self.configuration = configuration
         self.connectionState = "new"
         self.iceGatheringState = "complete"
         self.localDescription = None
@@ -46,8 +47,8 @@ def settings() -> Settings:
 async def test_offer_replaces_existing_connection(monkeypatch):
     created_connections = []
 
-    def create_peer_connection():
-        connection = FakePeerConnection()
+    def create_peer_connection(configuration):
+        connection = FakePeerConnection(configuration)
         created_connections.append(connection)
         return connection
 

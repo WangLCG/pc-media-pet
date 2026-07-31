@@ -4,9 +4,19 @@ import logging
 from collections.abc import Callable
 
 from aioice import ice
+from aiortc import RTCConfiguration
 
 logger = logging.getLogger(__name__)
 _original_get_host_addresses: Callable[[bool, bool], list[str]] = ice.get_host_addresses
+
+
+def local_ice_configuration() -> RTCConfiguration:
+    """Return an ICE configuration restricted to host candidates.
+
+    An explicit empty list prevents aiortc from using any built-in or future
+    default STUN/TURN service. Remote connectivity is provided by Tailscale.
+    """
+    return RTCConfiguration(iceServers=[])
 
 
 def configure_ice_candidates(*, ipv6_enabled: bool) -> None:

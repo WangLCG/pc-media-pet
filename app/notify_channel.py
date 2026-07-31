@@ -13,6 +13,7 @@ from aiortc.rtcdatachannel import RTCDataChannel
 
 from .config import Settings
 from .models import AckPayload, CameraErrorEvent, MediaStateEvent, MotionDetectedEvent, NotifyAnswer, NotifyEnvelope, NotifyOffer, PongPayload, SoundDetectedEvent
+from .webrtc import local_ice_configuration
 
 logger = logging.getLogger(__name__)
 CHINA_STANDARD_TIME = timezone(timedelta(hours=8), name="UTC+08:00")
@@ -118,7 +119,7 @@ class NotifyChannelManager:
 
     async def create_answer(self, offer: NotifyOffer) -> NotifyAnswer:
         """Replace an existing client connection and return an SDP answer."""
-        peer_connection = RTCPeerConnection()
+        peer_connection = RTCPeerConnection(local_ice_configuration())
         client = NotifyClient(client_id=offer.client_id, peer_connection=peer_connection)
 
         @peer_connection.on("datachannel")
