@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 
 CameraMode = Literal["idle", "view"]
 CameraErrorPublisher = Callable[[CameraErrorEvent], Awaitable[None]]
+VIEW_RESOLUTIONS = ((1280, 720), (1920, 1080), (2560, 1440), (3840, 2160))
 
 
 class _CameraWorker:
@@ -83,6 +84,8 @@ class CameraManager:
         self._settings = settings
         self._publish_error = publish_error
         self._mode: CameraMode = "idle"
+        self._view_width = settings.camera_view_width
+        self._view_height = settings.camera_view_height
         self._capture: cv2.VideoCapture | None = None
         self._latest_frame: np.ndarray | None = None
         self._frame_sequence = 0
@@ -131,6 +134,26 @@ class CameraManager:
                 if self._capture is not None:
                     await self._run_worker(lambda: self._configure_capture(self._capture, mode))
         logger.info("camera_mode_changed", extra={"mode": mode})
+
+    async def set_view_resolution(self, width: int, height: int) -> None:
+        """Select a supported view size and immediately apply it while viewing."""
+        if (width, height) not in VIEW_RESOLUTIONS:
+            raise ValueError("Unsupported camera resolution")
+        async with self._mode_lock:
+            self._view_width, self._view_height = width, height
+            async with self._capture_lock:
+                if self._capture is not None and self._mode == "view":
+                    await self._run_worker(lambda: self._configure_capture(self._capture, "view"))
+
+    async def get_view_capabilities(self) -> list[dict[str, int | str]]:
+        """Return standard HD/4K sizes the current camera reports it can accept."""
+        async with self._capture_lock:
+            if self._capture is None or not self._capture.isOpened():
+                self._capture = await self._open_capture_without_shutdown_race()
+            capture = self._capture
+            if capture is None:
+                return []
+            return await self._run_worker(lambda: self._probe_view_resolutions(capture))  # type: ignore[return-value]
 
     async def get_latest_frame(self) -> np.ndarray | None:
         """Return a copy so consumers cannot mutate the shared in-memory frame."""
@@ -284,9 +307,25 @@ class CameraManager:
             capture.set(cv2.CAP_PROP_FRAME_WIDTH, self._settings.camera_idle_width)
             capture.set(cv2.CAP_PROP_FRAME_HEIGHT, self._settings.camera_idle_height)
         else:
-            capture.set(cv2.CAP_PROP_FRAME_WIDTH, self._settings.camera_view_width)
-            capture.set(cv2.CAP_PROP_FRAME_HEIGHT, self._settings.camera_view_height)
+            capture.set(cv2.CAP_PROP_FRAME_WIDTH, self._view_width)
+            capture.set(cv2.CAP_PROP_FRAME_HEIGHT, self._view_height)
             capture.set(cv2.CAP_PROP_FPS, self._settings.camera_view_fps)
+
+    def _probe_view_resolutions(self, capture: cv2.VideoCapture) -> list[dict[str, int | str]]:
+        """Probe requested sizes through the active device, then restore its current mode."""
+        supported: list[dict[str, int | str]] = []
+        for width, height in VIEW_RESOLUTIONS:
+            capture.set(cv2.CAP_PROP_FRAME_WIDTH, width)
+            capture.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
+            actual_width = round(capture.get(cv2.CAP_PROP_FRAME_WIDTH))
+            actual_height = round(capture.get(cv2.CAP_PROP_FRAME_HEIGHT))
+            # Some drivers do not expose get() values. In that case retain the
+            # selectable standard sizes; the device will negotiate its closest mode.
+            if (actual_width, actual_height) in {(0, 0), (width, height)}:
+                label = "4K" if (width, height) == (3840, 2160) else f"{height}p"
+                supported.append({"width": width, "height": height, "label": label})
+        self._configure_capture(capture, self._mode)
+        return supported
 
     async def _report_error(self, code: Literal["camera_unavailable", "camera_read_failed"], message: str) -> None:
         if self._last_error_code == code:

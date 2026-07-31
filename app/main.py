@@ -86,6 +86,12 @@ async def status() -> dict[str, str | int]:
     }
 
 
+@app.get("/api/camera/capabilities", dependencies=[Depends(require_app_token)])
+async def camera_capabilities() -> dict[str, list[dict[str, int | str]]]:
+    """Expose the resolutions accepted by the locally attached camera."""
+    return {"resolutions": await app.state.camera_manager.get_view_capabilities()}
+
+
 @app.post("/api/notify/offer", response_model=NotifyAnswer, dependencies=[Depends(require_app_token)])
 async def notify_offer(offer: NotifyOffer) -> NotifyAnswer:
     """Accept a browser WebRTC offer for its long-lived notify channel."""

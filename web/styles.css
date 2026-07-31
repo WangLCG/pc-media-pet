@@ -64,9 +64,21 @@ button.is-loading .button-spinner { display: inline-block; }
 .status-pill[data-state="connected"], .status-pill[data-state="playing"] { color: #74e6b0; }
 .status-pill[data-state="error"] { color: #ff9ba5; }
 
+.resolution-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; margin-bottom: .55rem; color: #c8d7e8; font-size: .9rem; font-weight: 700; }
+.resolution-heading small { color: #86a2bc; font-size: .76rem; font-weight: 600; }
+.resolution-options { display: flex; flex-wrap: wrap; gap: .5rem; margin-bottom: 1rem; }
+.resolution-button { width: auto; min-height: 2.35rem; padding: .45rem .8rem; border-color: #476480; background: rgb(15 34 55 / 72%); color: #cfe6f8; box-shadow: none; font-size: .82rem; }
+.resolution-button[aria-pressed="true"] { border-color: #8ce0ff; background: linear-gradient(135deg, #5ac7ff, #4b8cff); color: #07111f; }
 .camera-controls { display: grid; gap: .75rem; }
-#remote-video { display: block; width: 100%; aspect-ratio: 16 / 9; margin-top: 1rem; border: 1px solid rgb(184 223 255 / 16%); border-radius: .8rem; background: #050d18; object-fit: contain; }
-#remote-video[hidden] { display: none; }
+.video-stage { margin-top: 1rem; overflow: hidden; border: 1px solid rgb(184 223 255 / 16%); border-radius: .8rem; background: #050d18; }
+.video-stage[hidden] { display: none; }
+.video-viewport { aspect-ratio: 16 / 9; overflow: hidden; background: #050d18; }
+#remote-video { display: block; width: 100%; height: 100%; object-fit: contain; transform: scale(var(--zoom, 1)); transition: transform .18s ease; }
+.zoom-controls { display: flex; align-items: center; justify-content: flex-end; gap: .45rem; padding: .55rem .65rem; border-top: 1px solid rgb(184 223 255 / 11%); background: rgb(9 24 41 / 82%); }
+.zoom-controls output { min-width: 3.4rem; color: #bcd8ed; font-size: .8rem; font-variant-numeric: tabular-nums; text-align: center; }
+.icon-button, .text-button { width: auto; min-height: 2rem; padding: .25rem .55rem; border-color: #4b6682; background: rgb(25 47 72 / 66%); color: #dcecff; box-shadow: none; }
+.icon-button { min-width: 2rem; font-size: 1.25rem; line-height: 1; }
+.text-button { font-size: .78rem; }
 .connection-result { display: block; min-height: 1.5rem; padding: .1rem .15rem; color: #c8ddf2; line-height: 1.5; }
 #alerts { display: grid; gap: .55rem; }
 #alerts p { margin: 0; padding: .7rem .8rem; border-radius: .7rem; background: rgb(117 41 55 / 54%); color: #ffe2e6; line-height: 1.5; }

@@ -16,10 +16,14 @@ def settings(**overrides) -> Settings:
 class FakeCamera:
     def __init__(self):
         self.modes = []
+        self.resolutions = []
         self.frame = np.zeros((20, 30, 3), dtype=np.uint8)
 
     async def set_mode(self, mode):
         self.modes.append(mode)
+
+    async def set_view_resolution(self, width, height):
+        self.resolutions.append((width, height))
 
     async def read_frame_for_media(self):
         return self.frame.copy()
@@ -74,6 +78,7 @@ async def test_media_session_uses_shared_camera_and_returns_to_idle(monkeypatch)
 
     assert answer.type == "answer"
     assert manager.session_count == 1
+    assert camera.resolutions == [(1280, 720)]
     assert camera.modes == ["view"]
     assert len(peer_connection.tracks) == 1
     assert isinstance(peer_connection.tracks[0], CameraVideoTrack)

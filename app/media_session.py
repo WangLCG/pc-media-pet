@@ -76,10 +76,11 @@ class MediaSessionManager:
                 await self.close_session(session_id, expected=peer_connection)
 
         async with self._lock:
+            first_session = not self._sessions
+            if first_session:
+                await self._camera.set_view_resolution(offer.width, offer.height)
+                await self._camera.set_mode("view")
             self._sessions[session_id] = session
-            first_session = len(self._sessions) == 1
-        if first_session:
-            await self._camera.set_mode("view")
 
         try:
             peer_connection.addTrack(CameraVideoTrack(self._camera, self._settings.camera_view_fps))

@@ -41,6 +41,12 @@ class FakeCapture:
         self.properties.append((property_id, value))
         return True
 
+    def get(self, property_id):
+        for set_property, value in reversed(self.properties):
+            if set_property == property_id:
+                return value
+        return 0
+
     def read(self):
         if not self.frames:
             return False, None
@@ -135,6 +141,32 @@ async def test_set_mode_reconfigures_the_single_capture(monkeypatch):
     values = [value for _, value in capture.properties]
     assert 320 in values and 180 in values
     assert 1280 in values and 720 in values and 30 in values
+
+
+@pytest.mark.asyncio
+async def test_camera_reports_hd_to_4k_modes_that_the_device_accepts(monkeypatch):
+    capture = FakeCapture([np.zeros((10, 10, 3), dtype=np.uint8)])
+    monkeypatch.setattr("app.camera.cv2.VideoCapture", lambda index: capture)
+    manager = CameraManager(settings(), lambda event: asyncio.sleep(0))
+
+    capabilities = await manager.get_view_capabilities()
+    await manager.stop()
+
+    assert capabilities[-1] == {"width": 3840, "height": 2160, "label": "4K"}
+
+
+@pytest.mark.asyncio
+async def test_selected_view_resolution_is_applied_to_the_camera(monkeypatch):
+    capture = FakeCapture([np.zeros((10, 10, 3), dtype=np.uint8)])
+    monkeypatch.setattr("app.camera.cv2.VideoCapture", lambda index: capture)
+    manager = CameraManager(settings(), lambda event: asyncio.sleep(0))
+    await manager._capture_once()
+    await manager.set_view_resolution(3840, 2160)
+    await manager.set_mode("view")
+    await manager.stop()
+
+    assert (cv2.CAP_PROP_FRAME_WIDTH, 3840) in capture.properties
+    assert (cv2.CAP_PROP_FRAME_HEIGHT, 2160) in capture.properties
 
 
 @pytest.mark.asyncio

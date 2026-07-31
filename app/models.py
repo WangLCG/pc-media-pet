@@ -30,6 +30,8 @@ class MediaOffer(NotifyOffer):
 
     video: bool = True
     audio: bool = False
+    width: int = Field(default=1280, ge=1, le=3840)
+    height: int = Field(default=720, ge=1, le=2160)
 
 
 class MediaAnswer(NotifyAnswer):
