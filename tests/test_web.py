@@ -10,6 +10,9 @@ def test_motion_notifications_use_the_web_audio_alert_after_connecting():
     assert "function playMotionAlert()" in source
     assert "prepareAlertAudio();" in source
     assert "playMotionAlert();" in source
+    assert "function playAlertTone()" in source
+    assert "prepareAlertAudio().then((ready) => { if (ready) playAlertTone(); })" in source
+    assert 'document.addEventListener("pointerdown", () => { void prepareAlertAudio(); });' in source
 
 
 def test_camera_page_offers_capability_based_resolution_and_zoom_controls():
