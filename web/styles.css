@@ -89,4 +89,14 @@ button.is-loading .button-spinner { display: inline-block; }
 
 @media (min-width: 34rem) { .camera-controls { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-height: 34rem) and (orientation: landscape) { body { padding-block: .75rem; } .app-shell { min-height: auto; } .panel { padding-block: 1rem; } .hero { margin-bottom: .9rem; } }
+/* ---- voice talk button ---- */
+.voice-talk-button { display: block; width: 100%; padding-block: 1.25rem; border: 2px solid rgb(125 159 194 / 30%); border-radius: .75rem; background: rgb(125 159 194 / 8%); color: #a9bfd5; font-size: 1.125rem; font-weight: 600; cursor: pointer; touch-action: none; user-select: none; -webkit-user-select: none; transition: background .12s, border-color .12s, transform .08s; }
+.voice-talk-button:active { transform: scale(.97); }
+.voice-talk-button:disabled { opacity: .4; cursor: not-allowed; }
+.voice-talk-button[data-state="ready"] { border-color: rgb(66 184 126 / 50%); background: rgb(66 184 126 / 12%); color: #7ed6a6; }
+.voice-talk-button[data-state="ready"]:hover:not(:disabled) { background: rgb(66 184 126 / 22%); }
+.voice-talk-button[data-state="recording"] { border-color: rgb(255 90 90 / 60%); background: rgb(255 90 90 / 16%); color: #ff8f8f; animation: voice-recording-pulse 1.4s ease-in-out infinite; }
+@keyframes voice-recording-pulse { 0%, 100% { box-shadow: 0 0 0 0 rgb(255 90 90 / 35%); } 50% { box-shadow: 0 0 0 .75rem rgb(255 90 90 / 0%); } }
+.voice-hint { display: block; margin-top: .5rem; text-align: center; color: #a9bfd5; font-size: .8rem; }
+
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; } }

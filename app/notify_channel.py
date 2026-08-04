@@ -1,5 +1,7 @@
 """Long-lived WebRTC DataChannel management for notifications."""
 
+from __future__ import annotations
+
 import asyncio
 import json
 import logging
@@ -7,13 +9,18 @@ import time
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+from typing import TYPE_CHECKING
 
 from aiortc import RTCPeerConnection, RTCSessionDescription
+from aiortc.mediastreams import AudioStreamTrack
 from aiortc.rtcdatachannel import RTCDataChannel
 
 from .config import Settings
-from .models import AckPayload, CameraErrorEvent, MediaStateEvent, MotionDetectedEvent, NotifyAnswer, NotifyEnvelope, NotifyOffer, PongPayload, SoundDetectedEvent
+from .models import AckPayload, CameraErrorEvent, MediaStateEvent, MotionDetectedEvent, NotifyAnswer, NotifyEnvelope, NotifyOffer, PongPayload, SoundDetectedEvent, VoiceDeniedPayload, VoiceEndedPayload, VoiceGrantedPayload, VoiceStartPayload
 from .webrtc import local_ice_configuration
+
+if TYPE_CHECKING:
+    from .voice_channel import VoiceChannelManager
 
 logger = logging.getLogger(__name__)
 CHINA_STANDARD_TIME = timezone(timedelta(hours=8), name="UTC+08:00")
@@ -46,11 +53,14 @@ class PendingAck:
 class NotifyChannelManager:
     """Create, monitor, and clean up one notify connection per client ID."""
 
-    def __init__(self, settings: Settings) -> None:
+    def __init__(self, settings: Settings, voice_manager: VoiceChannelManager | None = None) -> None:
         self._settings = settings
+        self._voice_manager = voice_manager
         self._clients: dict[str, NotifyClient] = {}
         self._pending_acks: dict[tuple[str, str], PendingAck] = {}
         self._lock = asyncio.Lock()
+        if voice_manager is not None:
+            voice_manager._on_sender_lost = self._notify_voice_ended
 
     @property
     def client_count(self) -> int:
@@ -137,6 +147,11 @@ class NotifyChannelManager:
             if peer_connection.connectionState in {"closed", "failed", "disconnected"}:
                 await self.close_client(offer.client_id, expected=peer_connection)
 
+        @peer_connection.on("track")
+        def on_track(track: AudioStreamTrack) -> None:
+            if track.kind == "audio" and self._voice_manager is not None:
+                self._voice_manager.register_track(offer.client_id, track)
+
         previous_client = await self._replace_client(client)
         if previous_client is not None:
             await self._close_client_resources(previous_client)
@@ -200,6 +215,9 @@ class NotifyChannelManager:
                 pong = PongPayload.model_validate(envelope.payload)
             elif envelope.type == "ack":
                 ack = AckPayload.model_validate(envelope.payload)
+            elif envelope.type in ("voice_start", "voice_stop"):
+                self._dispatch_voice(client, envelope)
+                return
             else:
                 raise ValueError("unexpected message type")
         except (ValueError, json.JSONDecodeError):
@@ -214,6 +232,39 @@ class NotifyChannelManager:
         client.awaiting_ping_id = None
         client.missed_pongs = 0
         logger.debug("notify_pong_received", extra={"client_id": client.client_id})
+
+    def _dispatch_voice(self, client: NotifyClient, envelope: NotifyEnvelope) -> None:
+        if self._voice_manager is None:
+            return
+        if envelope.type == "voice_start":
+            asyncio.create_task(self._handle_voice_start(client, envelope), name=f"voice-start-{client.client_id}")
+        elif envelope.type == "voice_stop":
+            asyncio.create_task(self._handle_voice_stop(client), name=f"voice-stop-{client.client_id}")
+
+    async def _handle_voice_start(self, client: NotifyClient, envelope: NotifyEnvelope) -> None:
+        try:
+            payload = VoiceStartPayload.model_validate(envelope.payload)
+            result = await self._voice_manager.handle_voice_start(client.client_id, payload)
+            if isinstance(result, VoiceGrantedPayload):
+                self._send(client, self._message("voice_granted", result.model_dump()))
+            else:
+                self._send(client, self._message("voice_denied", result.model_dump()))
+        except Exception:
+            logger.warning("voice_start_handler_error", extra={"client_id": client.client_id}, exc_info=True)
+
+    async def _handle_voice_stop(self, client: NotifyClient) -> None:
+        try:
+            await self._voice_manager.handle_voice_stop(client.client_id)
+        except Exception:
+            logger.warning("voice_stop_handler_error", extra={"client_id": client.client_id}, exc_info=True)
+
+    async def _notify_voice_ended(self, client_id: str) -> None:
+        """Send voice_ended to a client whose consumer task crashed."""
+        async with self._lock:
+            client = self._clients.get(client_id)
+        if client is not None:
+            payload = VoiceEndedPayload().model_dump()
+            self._send(client, self._message("voice_ended", payload))
 
     async def _ping_loop(self, client: NotifyClient) -> None:
         try:
@@ -324,6 +375,8 @@ class NotifyChannelManager:
                 return
             self._clients.pop(client_id)
         self._clear_pending_acks(client_id)
+        if self._voice_manager is not None:
+            await self._voice_manager.close_sender(client_id)
         await self._close_client_resources(client)
 
     def _clear_pending_acks(self, client_id: str) -> None:

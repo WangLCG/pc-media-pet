@@ -18,6 +18,7 @@ from .models import MediaAnswer, MediaOffer, MediaStopRequest, NotifyAnswer, Not
 from .media_session import MediaSessionManager
 from .motion import MotionDetector
 from .notify_channel import NotifyChannelManager
+from .voice_channel import VoiceChannelManager
 from .webrtc import configure_ice_candidates
 
 logger = logging.getLogger(__name__)
@@ -31,7 +32,8 @@ async def lifespan(app: FastAPI):
     # Validate configuration before accepting any request.
     settings = get_settings()
     configure_ice_candidates(ipv6_enabled=settings.webrtc_ipv6_enabled)
-    app.state.notify_manager = NotifyChannelManager(settings)
+    app.state.voice_manager = VoiceChannelManager(settings)
+    app.state.notify_manager = NotifyChannelManager(settings, voice_manager=app.state.voice_manager)
     app.state.event_bus = EventBus()
     app.state.event_bus.subscribe_motion(app.state.notify_manager.publish_motion)
     app.state.event_bus.subscribe_sound(app.state.notify_manager.publish_sound)
@@ -52,6 +54,7 @@ async def lifespan(app: FastAPI):
         await app.state.motion_detector.stop()
         await app.state.media_manager.close()
         await app.state.camera_manager.stop()
+        await app.state.voice_manager.close()
         await app.state.notify_manager.close()
         logger.info("service_stopped")
 
@@ -78,6 +81,7 @@ async def status() -> dict[str, str | int]:
     return {
         "service": "running",
         "notify_clients": app.state.notify_manager.client_count,
+        "voice_senders": app.state.voice_manager.sender_count,
         "media_sessions": app.state.media_manager.session_count,
         "camera_mode": app.state.camera_manager.mode,
         "motion_state": app.state.motion_detector.state,

@@ -51,7 +51,7 @@ class NotifyEnvelope(BaseModel):
     """Versioned JSON message sent through the notify DataChannel."""
 
     version: Literal[1]
-    type: Literal["hello", "ping", "pong", "motion_detected", "sound_detected", "camera_error", "media_state", "ack"]
+    type: Literal["hello", "ping", "pong", "motion_detected", "sound_detected", "camera_error", "media_state", "voice_start", "voice_granted", "voice_denied", "voice_ended", "voice_stop", "ack"]
     id: str = Field(min_length=1, max_length=128, pattern=MESSAGE_ID_PATTERN)
     ts: int = Field(ge=0)
     payload: dict[str, Any]
@@ -106,3 +106,30 @@ class MediaStateEvent(BaseModel):
     ts: int = Field(default_factory=lambda: int(time.time()), ge=0)
     state: Literal["started", "stopped"]
     session_id: str = Field(min_length=1, max_length=128, pattern=MESSAGE_ID_PATTERN)
+
+
+class VoiceStartPayload(BaseModel):
+    """Browser requests to begin sending voice over the existing audio track."""
+
+    codec: Literal["opus"] = "opus"
+
+
+class VoiceGrantedPayload(BaseModel):
+    """Server authorises a voice sender and assigns a session identifier."""
+
+    voice_id: str = Field(default_factory=lambda: f"voice_{uuid.uuid4().hex}", min_length=1, max_length=128, pattern=MESSAGE_ID_PATTERN)
+
+
+class VoiceDeniedPayload(BaseModel):
+    """Server rejects a voice request with a machine-readable reason."""
+
+    reason: Literal["voice_senders_full", "audio_device_error", "no_audio_track"]
+    current_senders: int = Field(ge=0, le=3)
+    max_senders: int = Field(ge=1, le=3)
+
+
+class VoiceEndedPayload(BaseModel):
+    """Server forcibly terminates a voice session (e.g. consumer crash)."""
+
+    voice_id: str = Field(default_factory=lambda: f"voice_{uuid.uuid4().hex}", min_length=1, max_length=128, pattern=MESSAGE_ID_PATTERN)
+    reason: Literal["consume_error"] = "consume_error"
