@@ -81,7 +81,7 @@ async def test_voice_start_is_routed_to_voice_manager(monkeypatch):
     notify_manager, voice_manager, _, channel = await connected_voice_manager(monkeypatch)
     try:
         from tests.test_voice_channel import FakeAudioTrack
-        voice_manager.register_track("browser-01", FakeAudioTrack(frames=0))
+        voice_manager.register_track("browser-01", FakeAudioTrack())
         channel.handlers["message"](json.dumps({
             "version": 1, "type": "voice_start", "id": "vstart_01", "ts": 0,
             "payload": VoiceStartPayload().model_dump(),
@@ -103,11 +103,11 @@ async def test_voice_denied_when_limit_reached(monkeypatch):
         from tests.test_voice_channel import FakeAudioTrack
         for i in range(3):
             cid = f"filler-{i:02d}"
-            voice_manager.register_track(cid, FakeAudioTrack(frames=0))
+            voice_manager.register_track(cid, FakeAudioTrack())
             await voice_manager.handle_voice_start(cid, VoiceStartPayload())
         assert voice_manager.sender_count == 3
 
-        voice_manager.register_track("browser-01", FakeAudioTrack(frames=0))
+        voice_manager.register_track("browser-01", FakeAudioTrack())
         channel.handlers["message"](json.dumps({
             "version": 1, "type": "voice_start", "id": "vstart_01", "ts": 0,
             "payload": VoiceStartPayload().model_dump(),
@@ -126,7 +126,7 @@ async def test_voice_stop_releases_slot_and_allows_new_sender(monkeypatch):
     notify_manager, voice_manager, _, channel = await connected_voice_manager(monkeypatch)
     try:
         from tests.test_voice_channel import FakeAudioTrack
-        voice_manager.register_track("browser-01", FakeAudioTrack(frames=0))
+        voice_manager.register_track("browser-01", FakeAudioTrack())
         channel.handlers["message"](json.dumps({
             "version": 1, "type": "voice_start", "id": "vstart_01", "ts": 0,
             "payload": VoiceStartPayload().model_dump(),
@@ -160,7 +160,7 @@ async def test_client_disconnect_cleans_voice_sender(monkeypatch):
         notify_manager._bind_channel(client, channel)
         channel.handlers["open"]()
         from tests.test_voice_channel import FakeAudioTrack
-        voice_manager.register_track("browser-01", FakeAudioTrack(frames=0))
+        voice_manager.register_track("browser-01", FakeAudioTrack())
         await voice_manager.handle_voice_start("browser-01", VoiceStartPayload())
         assert voice_manager.sender_count == 1
 

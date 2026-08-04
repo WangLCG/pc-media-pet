@@ -7,12 +7,17 @@ import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 
+import av
 from aiortc.mediastreams import AudioStreamTrack
 
 from .config import Settings
 from .models import VoiceDeniedPayload, VoiceGrantedPayload, VoiceStartPayload
 
 logger = logging.getLogger(__name__)
+
+_PLAYBACK_SAMPLE_RATE = 48_000
+_PLAYBACK_CHANNELS = 1
+_PLAYBACK_FRAMES_PER_BUFFER = 960
 
 
 @dataclass
@@ -38,14 +43,24 @@ class AudioPlayer:
     def open(self) -> None:
         import pyaudio
 
-        self._pyaudio = pyaudio.PyAudio()
-        self._stream = self._pyaudio.open(
-            format=pyaudio.paInt16,
-            channels=self._channels,
-            rate=self._sample_rate,
-            output=True,
-            frames_per_buffer=self._frames_per_buffer,
-        )
+        try:
+            self._pyaudio = pyaudio.PyAudio()
+        except Exception as exc:
+            raise RuntimeError(f"Failed to initialise PyAudio (is the library installed?): {exc}") from exc
+        try:
+            self._stream = self._pyaudio.open(
+                format=pyaudio.paInt16,
+                channels=self._channels,
+                rate=self._sample_rate,
+                output=True,
+                frames_per_buffer=self._frames_per_buffer,
+            )
+        except OSError as exc:
+            self._pyaudio.terminate()
+            self._pyaudio = None
+            raise RuntimeError(
+                f"Failed to open audio output (channels={self._channels}, rate={self._sample_rate}): {exc}"
+            ) from exc
 
     def write(self, pcm_bytes: bytes) -> None:
         if self._stream is None:
@@ -98,32 +113,82 @@ class VoiceChannelManager:
                     current_senders=len(self._senders),
                     max_senders=self._max_senders,
                 )
+        # Wait briefly for the audio track to arrive via the WebRTC track event.
+        # The client sends the track before voice_start, but data-channel and
+        # media-channel delivery ordering is not guaranteed.
+        track: AudioStreamTrack | None = None
+        for _ in range(20):
             track = self._tracks.get(client_id)
+            if track is not None:
+                break
+            await asyncio.sleep(0.05)
+        async with self._lock:
             if track is None:
                 return VoiceDeniedPayload(
                     reason="no_audio_track",
                     current_senders=len(self._senders),
                     max_senders=self._max_senders,
                 )
-            sender = VoiceSender(client_id=client_id, voice_id=VoiceGrantedPayload().voice_id)
-            try:
-                player = self._create_player()
-                player.open()
-            except Exception:
-                logger.warning("voice_audio_device_failed", extra={"client_id": client_id})
+            if len(self._senders) >= self._max_senders:
                 return VoiceDeniedPayload(
-                    reason="audio_device_error",
+                    reason="voice_senders_full",
                     current_senders=len(self._senders),
                     max_senders=self._max_senders,
                 )
-            sender._audio_player = player
-            sender._consumer_task = asyncio.create_task(
-                self._consume_audio(track, player, sender),
-                name=f"voice-consume-{client_id}",
-            )
+            sender = VoiceSender(client_id=client_id, voice_id=VoiceGrantedPayload().voice_id)
             self._senders[client_id] = sender
-            logger.info("voice_sender_granted", extra={"client_id": client_id, "voice_id": sender.voice_id, "sender_count": len(self._senders)})
-            return VoiceGrantedPayload(voice_id=sender.voice_id)
+        # Read the first audio frame outside the lock.  Decoder output may use
+        # a source-specific sample rate or layout, so normalize it before
+        # opening the speaker stream.
+        try:
+            first_frame = await asyncio.wait_for(track.recv(), timeout=5.0)
+        except (asyncio.TimeoutError, Exception):
+            async with self._lock:
+                self._senders.pop(client_id, None)
+            logger.warning("voice_first_frame_timeout", extra={"client_id": client_id})
+            return VoiceDeniedPayload(
+                reason="no_audio_track",
+                current_senders=len(self._senders),
+                max_senders=self._max_senders,
+            )
+        try:
+            resampler = av.AudioResampler(
+                format="s16", layout="mono", rate=_PLAYBACK_SAMPLE_RATE
+            )
+            player = self._create_player(
+                sample_rate=_PLAYBACK_SAMPLE_RATE,
+                channels=_PLAYBACK_CHANNELS,
+                frames_per_buffer=_PLAYBACK_FRAMES_PER_BUFFER,
+            )
+            player.open()
+        except Exception:
+            async with self._lock:
+                self._senders.pop(client_id, None)
+            logger.warning("voice_audio_device_failed", extra={"client_id": client_id}, exc_info=True)
+            return VoiceDeniedPayload(
+                reason="audio_device_error",
+                current_senders=len(self._senders),
+                max_senders=self._max_senders,
+            )
+        try:
+            self._write_resampled_frames(player, resampler.resample(first_frame))
+        except Exception:
+            player.close()
+            async with self._lock:
+                self._senders.pop(client_id, None)
+            logger.warning("voice_first_frame_write_failed", extra={"client_id": client_id}, exc_info=True)
+            return VoiceDeniedPayload(
+                reason="audio_device_error",
+                current_senders=len(self._senders),
+                max_senders=self._max_senders,
+            )
+        sender._audio_player = player
+        sender._consumer_task = asyncio.create_task(
+            self._consume_audio(track, player, sender, resampler),
+            name=f"voice-consume-{client_id}",
+        )
+        logger.info("voice_sender_granted", extra={"client_id": client_id, "voice_id": sender.voice_id, "sender_count": len(self._senders), "source_sample_rate": first_frame.sample_rate, "source_channels": len(first_frame.layout.channels), "playback_sample_rate": _PLAYBACK_SAMPLE_RATE, "playback_channels": _PLAYBACK_CHANNELS})
+        return VoiceGrantedPayload(voice_id=sender.voice_id)
 
     async def handle_voice_stop(self, client_id: str) -> None:
         """Release a voice sender's resources."""
@@ -156,13 +221,23 @@ class VoiceChannelManager:
             loop.call_soon(player.close)
         logger.info("voice_sender_released", extra={"client_id": client_id, "voice_id": sender.voice_id, "sender_count": len(self._senders)})
 
-    async def _consume_audio(self, track: AudioStreamTrack, player: AudioPlayer, sender: VoiceSender) -> None:
+    @staticmethod
+    def _write_resampled_frames(player: AudioPlayer, frames: list[av.AudioFrame]) -> None:
+        for frame in frames:
+            # The resampler produces packed mono s16.  Reading the plane avoids
+            # NumPy's planar-layout representation for multi-channel inputs.
+            player.write(bytes(frame.planes[0])[: frame.samples * 2])
+
+    async def _consume_audio(self, track: AudioStreamTrack, player: AudioPlayer, sender: VoiceSender, resampler: av.AudioResampler) -> None:
         """Read Opus-decoded PCM frames and write them to the speaker. Runs until cancelled."""
         try:
             while True:
                 frame = await track.recv()
-                pcm = frame.to_ndarray().tobytes()
-                player.write(pcm)
+                self._write_resampled_frames(player, resampler.resample(frame))
+                # A real aiortc track waits for its next media frame.  Keep the
+                # consumer cooperative even if a faulty/custom track returns
+                # immediately, otherwise it can monopolise the event loop.
+                await asyncio.sleep(0)
         except asyncio.CancelledError:
             pass
         except Exception:
